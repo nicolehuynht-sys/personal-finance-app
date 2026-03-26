@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_USER_ID } from "@/lib/utils";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
+  const serverSupabase = await createServerSupabaseClient();
+  const { data: { user } } = await serverSupabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = user.id;
+
   const supabase = createAdminClient();
 
   try {
@@ -14,8 +19,6 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-
-    const userId = DEV_USER_ID;
 
     // 1. Update the transaction
     const { error: updateError } = await supabase

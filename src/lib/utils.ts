@@ -49,6 +49,3 @@ export function formatDateGroup(dateStr: string): string {
 export function cn(...classes: (string | undefined | false | null)[]): string {
   return classes.filter(Boolean).join(" ");
 }
-
-// Dev user ID for v1 (no auth)
-export const DEV_USER_ID = "00000000-0000-0000-0000-000000000001";

@@ -1,64 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Header } from "@/components/layout/Header";
 import { DropZone } from "@/components/import/DropZone";
 import { UploadHistory } from "@/components/import/UploadHistory";
 import { AccountSelector } from "@/components/import/AccountSelector";
+import { createClient } from "@/lib/supabase/client";
 import type { Upload, Account } from "@/lib/types";
+import { useAuth } from "@/hooks/useAuth";
 import toast from "react-hot-toast";
 
-// Sample data for display
-const SAMPLE_UPLOADS: Upload[] = [
-  {
-    id: "1",
-    user_id: "",
-    account_id: null,
-    file_name: "Quarterly_Statement.csv",
-    file_path: "",
-    file_size_bytes: 24000,
-    mime_type: "text/csv",
-    status: "completed",
-    row_count: 142,
-    error_message: null,
-    created_at: "2024-10-20T00:00:00Z",
-    completed_at: "2024-10-20T00:01:00Z",
-  },
-  {
-    id: "2",
-    user_id: "",
-    account_id: null,
-    file_name: "Amex_Black_Nov.xlsx",
-    file_path: "",
-    file_size_bytes: 18000,
-    mime_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    status: "processing",
-    row_count: null,
-    error_message: null,
-    created_at: "2024-10-24T00:00:00Z",
-    completed_at: null,
-  },
-  {
-    id: "3",
-    user_id: "",
-    account_id: null,
-    file_name: "Export_Draft_02.csv",
-    file_path: "",
-    file_size_bytes: 5000,
-    mime_type: "text/csv",
-    status: "failed",
-    row_count: null,
-    error_message: "Format Mismatch",
-    created_at: "2024-10-22T00:00:00Z",
-    completed_at: null,
-  },
-];
-
 export default function ImportPage() {
+  const { userId } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
-  const [uploads] = useState<Upload[]>(SAMPLE_UPLOADS);
-  const [accounts] = useState<Account[]>([]);
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+
+  const supabase = createClient();
+
+  const fetchUploads = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase
+      .from("uploads")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (data) setUploads(data);
+  }, [userId]);
+
+  const fetchAccounts = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase
+      .from("accounts")
+      .select("*")
+      .eq("user_id", userId)
+      .order("name");
+    if (data) setAccounts(data);
+  }, [userId]);
+
+  useEffect(() => {
+    fetchUploads();
+    fetchAccounts();
+  }, [fetchUploads, fetchAccounts]);
 
   const handleFileSelect = async (file: File) => {
     // Validate file type
@@ -79,13 +64,37 @@ export default function ImportPage() {
     }
 
     setIsUploading(true);
-    toast.success(`Selected: ${file.name}`);
 
-    // TODO: Actually upload to Supabase Storage and call /api/upload
-    setTimeout(() => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (selectedAccountId) {
+        formData.append("accountId", selectedAccountId);
+      }
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        toast.error(result.error || "Upload failed");
+      } else {
+        toast.success(
+          `Imported ${result.imported} transactions` +
+          (result.duplicatesSkipped > 0 ? ` (${result.duplicatesSkipped} duplicates skipped)` : "")
+        );
+        // Refresh upload history
+        fetchUploads();
+      }
+    } catch (err) {
+      toast.error("Upload failed — check your connection");
+      console.error(err);
+    } finally {
       setIsUploading(false);
-      toast.success("File processed (demo mode)");
-    }, 2000);
+    }
   };
 
   return (
@@ -103,19 +112,31 @@ export default function ImportPage() {
           </p>
         </div>
 
-        {/* Drop Zone + Account Selector — side by side on desktop */}
+        {/* Drop Zone + Account Selector */}
         <div className="px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="md:col-span-2">
-            <DropZone onFileSelect={handleFileSelect} isUploading={isUploading} />
+            <DropZone onFileSelect={handleFileSelect} isUploading={isUploading} disabled={!selectedAccountId} />
           </div>
           <div>
             <AccountSelector
               accounts={accounts}
               selectedId={selectedAccountId}
               onSelect={setSelectedAccountId}
-              onCreateNew={(name, institution) => {
-                // TODO: create in Supabase
-                toast.success(`Created account: ${name}`);
+              onCreateNew={async (name, institution) => {
+                if (!userId) return;
+                const { data, error } = await supabase.from("accounts").insert({
+                  user_id: userId,
+                  name,
+                  institution: institution || null,
+                  account_type: "checking",
+                }).select().single();
+                if (error) {
+                  toast.error("Failed to create account");
+                } else {
+                  toast.success(`Created account: ${name}`);
+                  await fetchAccounts();
+                  setSelectedAccountId(data.id);
+                }
               }}
             />
           </div>
@@ -123,7 +144,27 @@ export default function ImportPage() {
 
         {/* Upload History */}
         <div className="px-6 pt-12">
-          <UploadHistory uploads={uploads} />
+          <UploadHistory
+            uploads={uploads}
+            onDelete={async (uploadId, fileName) => {
+              if (!confirm(`Delete "${fileName}" and all its transactions?`)) return;
+              // Delete transactions first (foreign key), then the upload
+              await supabase
+                .from("transactions")
+                .delete()
+                .eq("upload_id", uploadId);
+              const { error } = await supabase
+                .from("uploads")
+                .delete()
+                .eq("id", uploadId);
+              if (error) {
+                toast.error("Failed to delete upload");
+              } else {
+                toast.success(`Deleted "${fileName}"`);
+                fetchUploads();
+              }
+            }}
+          />
         </div>
       </div>
     </>

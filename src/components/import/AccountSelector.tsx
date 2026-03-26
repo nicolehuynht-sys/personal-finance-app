@@ -46,7 +46,7 @@ export function AccountSelector({
         }}
         className="w-full h-12 bg-white border border-silver-light rounded-xl px-4 text-sm font-medium text-slate-700 focus:ring-1 focus:ring-deep-green focus:border-deep-green"
       >
-        <option value="">No account (optional)</option>
+        <option value="">Select an account</option>
         {accounts.map((acc) => (
           <option key={acc.id} value={acc.id}>
             {acc.name}

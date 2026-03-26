@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { parseCSV } from "@/lib/parsers/csv-parser";
 import { parseXLSX } from "@/lib/parsers/xlsx-parser";
 import { normalizeRows } from "@/lib/parsers/normalizer";
 import { deduplicateTransactions } from "@/lib/parsers";
 import { categorizeBatch } from "@/lib/categorization/engine";
-import { DEV_USER_ID } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
+  const serverSupabase = await createServerSupabaseClient();
+  const { data: { user } } = await serverSupabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = user.id;
+
   const supabase = createAdminClient();
 
   try {
@@ -18,8 +23,6 @@ export async function POST(req: NextRequest) {
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
-
-    const userId = DEV_USER_ID;
 
     // 1. Create upload record
     const { data: upload, error: uploadError } = await supabase

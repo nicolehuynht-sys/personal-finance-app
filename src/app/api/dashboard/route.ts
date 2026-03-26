@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { DEV_USER_ID } from "@/lib/utils";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function GET(req: NextRequest) {
+  const serverSupabase = await createServerSupabaseClient();
+  const { data: { user } } = await serverSupabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = user.id;
+
   const supabase = createAdminClient();
-  const userId = DEV_USER_ID;
 
   const searchParams = req.nextUrl.searchParams;
   const fromDate = searchParams.get("from");

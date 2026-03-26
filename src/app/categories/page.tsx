@@ -1,54 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Header } from "@/components/layout/Header";
-import { PageShell } from "@/components/layout/PageShell";
 import { CategoryTree } from "@/components/categories/CategoryTree";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { createClient } from "@/lib/supabase/client";
 import type { Category } from "@/lib/types";
-import { DEV_USER_ID } from "@/lib/utils";
-
-// Seed categories for now (will be fetched from Supabase later)
-const SEED_CATEGORIES: Category[] = [
-  { id: "10000000-0000-0000-0000-000000000001", user_id: DEV_USER_ID, parent_id: null, name: "Housing", icon: "home", is_system: true, exclude_from_totals: false, sort_order: 1, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000002", user_id: DEV_USER_ID, parent_id: null, name: "Food & Beverage", icon: "restaurant", is_system: true, exclude_from_totals: false, sort_order: 2, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000003", user_id: DEV_USER_ID, parent_id: null, name: "Transport", icon: "directions_car", is_system: true, exclude_from_totals: false, sort_order: 3, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000004", user_id: DEV_USER_ID, parent_id: null, name: "Entertainment", icon: "movie", is_system: true, exclude_from_totals: false, sort_order: 4, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000005", user_id: DEV_USER_ID, parent_id: null, name: "Shopping", icon: "shopping_bag", is_system: true, exclude_from_totals: false, sort_order: 5, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000006", user_id: DEV_USER_ID, parent_id: null, name: "Healthcare", icon: "local_hospital", is_system: true, exclude_from_totals: false, sort_order: 6, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000007", user_id: DEV_USER_ID, parent_id: null, name: "Utilities", icon: "bolt", is_system: true, exclude_from_totals: false, sort_order: 7, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000008", user_id: DEV_USER_ID, parent_id: null, name: "Insurance", icon: "shield", is_system: true, exclude_from_totals: false, sort_order: 8, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000009", user_id: DEV_USER_ID, parent_id: null, name: "Education", icon: "school", is_system: true, exclude_from_totals: false, sort_order: 9, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000010", user_id: DEV_USER_ID, parent_id: null, name: "Travel", icon: "flight", is_system: true, exclude_from_totals: false, sort_order: 10, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000011", user_id: DEV_USER_ID, parent_id: null, name: "Personal Care", icon: "spa", is_system: true, exclude_from_totals: false, sort_order: 11, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000012", user_id: DEV_USER_ID, parent_id: null, name: "Gifts", icon: "redeem", is_system: true, exclude_from_totals: false, sort_order: 12, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000013", user_id: DEV_USER_ID, parent_id: null, name: "Income", icon: "payments", is_system: true, exclude_from_totals: false, sort_order: 13, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000014", user_id: DEV_USER_ID, parent_id: null, name: "Investment", icon: "trending_up", is_system: true, exclude_from_totals: false, sort_order: 14, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000015", user_id: DEV_USER_ID, parent_id: null, name: "Other", icon: "more_horiz", is_system: true, exclude_from_totals: false, sort_order: 15, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000016", user_id: DEV_USER_ID, parent_id: null, name: "Account Transfer", icon: "swap_horiz", is_system: true, exclude_from_totals: false, sort_order: 16, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000017", user_id: DEV_USER_ID, parent_id: null, name: "Card Payment", icon: "credit_card", is_system: true, exclude_from_totals: false, sort_order: 17, created_at: "" },
-  // Sub-categories
-  { id: "20000000-0000-0000-0000-000000000001", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000002", name: "Groceries", icon: "shopping_cart", is_system: true, exclude_from_totals: false, sort_order: 1, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000002", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000002", name: "Dining Out", icon: "restaurant_menu", is_system: true, exclude_from_totals: false, sort_order: 2, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000003", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000002", name: "Coffee Shops", icon: "coffee", is_system: true, exclude_from_totals: false, sort_order: 3, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000004", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000003", name: "Public Transit", icon: "train", is_system: true, exclude_from_totals: false, sort_order: 1, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000005", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000003", name: "Fuel", icon: "local_gas_station", is_system: true, exclude_from_totals: false, sort_order: 2, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000006", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000003", name: "Ride Share", icon: "hail", is_system: true, exclude_from_totals: false, sort_order: 3, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000007", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000004", name: "Subscriptions", icon: "subscriptions", is_system: true, exclude_from_totals: false, sort_order: 1, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000008", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000004", name: "Events", icon: "event", is_system: true, exclude_from_totals: false, sort_order: 2, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000009", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000013", name: "Salary", icon: "account_balance", is_system: true, exclude_from_totals: false, sort_order: 1, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000010", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000013", name: "Freelance", icon: "work", is_system: true, exclude_from_totals: false, sort_order: 2, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000011", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000014", name: "Dividends", icon: "savings", is_system: true, exclude_from_totals: false, sort_order: 1, created_at: "" },
-];
+import { useAuth } from "@/hooks/useAuth";
+import toast from "react-hot-toast";
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>(SEED_CATEGORIES);
+  const { userId } = useAuth();
+  const [categories, setCategories] = useState<Category[]>([]);
   const [editModal, setEditModal] = useState<{ open: boolean; category?: Category }>({ open: false });
+  const [editName, setEditName] = useState("");
   const [newCatModal, setNewCatModal] = useState<{ open: boolean; parentId?: string }>({ open: false });
   const [newName, setNewName] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const supabase = createClient();
+
+  const fetchCategories = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("user_id", userId)
+      .order("sort_order");
+    if (data) setCategories(data);
+  }, [userId]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   const filteredCategories = searchQuery
     ? categories.filter((c) =>
@@ -77,7 +63,6 @@ export default function CategoriesPage() {
       />
 
       <div className="px-6 pb-32 lg:pb-8 max-w-3xl mx-auto">
-        {/* Search bar (toggled) */}
         {searchOpen && (
           <div className="mt-4 mb-2">
             <div className="relative flex items-center">
@@ -104,25 +89,44 @@ export default function CategoriesPage() {
 
         <CategoryTree
           categories={filteredCategories}
-          onEdit={(cat) => setEditModal({ open: true, category: cat })}
-          onDelete={(cat) => {
+          onEdit={(cat) => {
+            setEditModal({ open: true, category: cat });
+            setEditName(cat.name);
+          }}
+          onDelete={async (cat) => {
             if (confirm(`Delete "${cat.name}"?`)) {
-              // TODO: delete from Supabase
+              const { error } = await supabase
+                .from("categories")
+                .delete()
+                .eq("id", cat.id);
+              if (error) {
+                toast.error("Failed to delete category");
+              } else {
+                toast.success(`Deleted "${cat.name}"`);
+                fetchCategories();
+              }
             }
           }}
           onAddSub={(parentId) => {
             setNewCatModal({ open: true, parentId });
             setNewName("");
           }}
-          onToggleExclude={(cat) => {
+          onToggleExclude={async (cat) => {
+            const newValue = !cat.exclude_from_totals;
+            // Optimistic update
             setCategories((prev) =>
               prev.map((c) =>
-                c.id === cat.id
-                  ? { ...c, exclude_from_totals: !c.exclude_from_totals }
-                  : c
+                c.id === cat.id ? { ...c, exclude_from_totals: newValue } : c
               )
             );
-            // TODO: persist to Supabase
+            const { error } = await supabase
+              .from("categories")
+              .update({ exclude_from_totals: newValue })
+              .eq("id", cat.id);
+            if (error) {
+              toast.error("Failed to update");
+              fetchCategories(); // Revert on error
+            }
           }}
         />
 
@@ -146,7 +150,8 @@ export default function CategoriesPage() {
       >
         <input
           type="text"
-          defaultValue={editModal.category?.name}
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
           className="w-full h-12 border border-silver-light rounded-xl px-4 text-sm font-medium focus:ring-1 focus:ring-deep-green focus:border-deep-green"
           placeholder="Category name"
         />
@@ -154,7 +159,23 @@ export default function CategoriesPage() {
           <Button variant="outline" className="flex-1" onClick={() => setEditModal({ open: false })}>
             Cancel
           </Button>
-          <Button className="flex-1" onClick={() => setEditModal({ open: false })}>
+          <Button
+            className="flex-1"
+            onClick={async () => {
+              if (!editModal.category || !editName.trim()) return;
+              const { error } = await supabase
+                .from("categories")
+                .update({ name: editName.trim() })
+                .eq("id", editModal.category.id);
+              if (error) {
+                toast.error("Failed to update category");
+              } else {
+                toast.success("Category updated");
+                setEditModal({ open: false });
+                fetchCategories();
+              }
+            }}
+          >
             Save
           </Button>
         </div>
@@ -177,7 +198,27 @@ export default function CategoriesPage() {
           <Button variant="outline" className="flex-1" onClick={() => setNewCatModal({ open: false })}>
             Cancel
           </Button>
-          <Button className="flex-1" onClick={() => setNewCatModal({ open: false })}>
+          <Button
+            className="flex-1"
+            onClick={async () => {
+              if (!newName.trim() || !userId) return;
+              const maxSort = categories.reduce((max, c) => Math.max(max, c.sort_order), 0);
+              const { error } = await supabase.from("categories").insert({
+                user_id: userId,
+                parent_id: newCatModal.parentId || null,
+                name: newName.trim(),
+                icon: "category",
+                sort_order: maxSort + 1,
+              });
+              if (error) {
+                toast.error("Failed to create category");
+              } else {
+                toast.success(`Created "${newName.trim()}"`);
+                setNewCatModal({ open: false });
+                fetchCategories();
+              }
+            }}
+          >
             Create
           </Button>
         </div>

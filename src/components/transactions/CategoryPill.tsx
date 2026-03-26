@@ -30,15 +30,6 @@ export function CategoryPill({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
-  if (!category) {
-    return (
-      <span className="flex items-center gap-1.5 text-[10px] font-bold bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full w-fit border border-silver-light">
-        Uncategorized
-        <span className="material-symbols-outlined text-[12px] ml-0.5">expand_more</span>
-      </span>
-    );
-  }
-
   // Group categories for dropdown: parents with their children
   const parents = allCategories.filter((c) => !c.parent_id);
   const childrenMap = new Map<string, Category[]>();
@@ -54,15 +45,25 @@ export function CategoryPill({
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 text-[10px] font-bold bg-deep-green text-white px-2.5 py-1 rounded-full w-fit"
+        className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full w-fit ${
+          category
+            ? "bg-deep-green text-white"
+            : "bg-slate-100 text-slate-500 border border-silver-light"
+        }`}
       >
-        {parentCategory && (
+        {category ? (
           <>
-            <span>{parentCategory.name}</span>
-            <span className="opacity-30">&bull;</span>
+            {parentCategory && (
+              <>
+                <span>{parentCategory.name}</span>
+                <span className="opacity-30">&bull;</span>
+              </>
+            )}
+            <span>{category.name}</span>
           </>
+        ) : (
+          <span>Uncategorized</span>
         )}
-        <span>{category.name}</span>
         <span className="material-symbols-outlined text-[12px] ml-0.5">expand_more</span>
       </button>
 
@@ -78,7 +79,7 @@ export function CategoryPill({
                     setOpen(false);
                   }}
                   className={`w-full text-left px-4 py-2 text-sm font-semibold hover:bg-slate-50 flex items-center gap-2 ${
-                    category.id === parent.id ? "text-deep-green" : "text-slate-700"
+                    category?.id === parent.id ? "text-deep-green" : "text-slate-700"
                   }`}
                 >
                   <span className="material-symbols-outlined text-[16px]">
@@ -94,7 +95,7 @@ export function CategoryPill({
                       setOpen(false);
                     }}
                     className={`w-full text-left pl-10 pr-4 py-1.5 text-[13px] hover:bg-slate-50 ${
-                      category.id === child.id
+                      category?.id === child.id
                         ? "text-deep-green font-semibold"
                         : "text-slate-500"
                     }`}

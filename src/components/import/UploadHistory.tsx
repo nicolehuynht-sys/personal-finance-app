@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/Badge";
 
 interface UploadHistoryProps {
   uploads: Upload[];
+  onDelete?: (uploadId: string, fileName: string) => void;
 }
 
 const statusConfig = {
@@ -12,7 +13,7 @@ const statusConfig = {
   failed: { badge: "error" as const, icon: "error", label: "Failed" },
 };
 
-export function UploadHistory({ uploads }: UploadHistoryProps) {
+export function UploadHistory({ uploads, onDelete }: UploadHistoryProps) {
   if (uploads.length === 0) return null;
 
   return (
@@ -77,6 +78,16 @@ export function UploadHistory({ uploads }: UploadHistoryProps) {
               </div>
 
               <Badge variant={config.badge}>{config.label}</Badge>
+
+              {onDelete && (
+                <button
+                  onClick={() => onDelete(upload.id, upload.file_name)}
+                  className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-silver-metallic hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                  title="Delete upload and its transactions"
+                >
+                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                </button>
+              )}
             </div>
           );
         })}

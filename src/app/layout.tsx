@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Toaster } from "react-hot-toast";
-import { BottomNav } from "@/components/layout/BottomNav";
+import { NavWrapper } from "@/components/layout/NavWrapper";
 import "./globals.css";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -29,8 +29,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col font-sans antialiased">
-        <main className="flex-1 pb-28 lg:pb-0 lg:ml-20">{children}</main>
-        <BottomNav />
+        <NavWrapper>{children}</NavWrapper>
         <Toaster position="top-center" />
       </body>
     </html>

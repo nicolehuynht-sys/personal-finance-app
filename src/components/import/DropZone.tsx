@@ -5,9 +5,10 @@ import { useCallback, useState } from "react";
 interface DropZoneProps {
   onFileSelect: (file: File) => void;
   isUploading: boolean;
+  disabled?: boolean;
 }
 
-export function DropZone({ onFileSelect, isUploading }: DropZoneProps) {
+export function DropZone({ onFileSelect, isUploading, disabled }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -48,7 +49,7 @@ export function DropZone({ onFileSelect, isUploading }: DropZoneProps) {
           isDragging
             ? "border-deep-green bg-deep-green/5"
             : "border-deep-green/40 bg-gradient-to-br from-white to-silver-light/30 hover:border-deep-green/60"
-        } ${isUploading ? "opacity-50 pointer-events-none" : ""}`}
+        } ${isUploading || disabled ? "opacity-50 pointer-events-none" : ""}`}
       >
         <div className="flex flex-col items-center gap-5">
           <div className="w-14 h-14 flex items-center justify-center rounded-full bg-white border border-border-silver shadow-sm">
@@ -58,7 +59,7 @@ export function DropZone({ onFileSelect, isUploading }: DropZoneProps) {
           </div>
           <div className="flex flex-col items-center gap-1.5 text-center">
             <p className="text-deep-green text-[15px] font-semibold tracking-wide uppercase">
-              {isUploading ? "Uploading..." : "Select Document"}
+              {isUploading ? "Uploading..." : disabled ? "Select an account first" : "Select Document"}
             </p>
             <p className="text-silver-metallic text-[12px] tracking-wide italic">
               CSV, XLSX &bull; Maximum 10MB
@@ -66,7 +67,7 @@ export function DropZone({ onFileSelect, isUploading }: DropZoneProps) {
           </div>
         </div>
       </div>
-      {!isUploading && (
+      {!isUploading && !disabled && (
         <input
           type="file"
           accept=".csv,.xlsx,.xls"

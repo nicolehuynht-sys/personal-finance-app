@@ -1,90 +1,73 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Header } from "@/components/layout/Header";
 import { TransactionList } from "@/components/transactions/TransactionList";
+import { createClient } from "@/lib/supabase/client";
 import type { Transaction, Category } from "@/lib/types";
-import { DEV_USER_ID } from "@/lib/utils";
-
-// Sample categories (same as categories page)
-const CATEGORIES: Category[] = [
-  { id: "10000000-0000-0000-0000-000000000002", user_id: DEV_USER_ID, parent_id: null, name: "Food & Beverage", icon: "restaurant", is_system: true, exclude_from_totals: false, sort_order: 2, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000003", user_id: DEV_USER_ID, parent_id: null, name: "Transport", icon: "directions_car", is_system: true, exclude_from_totals: false, sort_order: 3, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000004", user_id: DEV_USER_ID, parent_id: null, name: "Entertainment", icon: "movie", is_system: true, exclude_from_totals: false, sort_order: 4, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000013", user_id: DEV_USER_ID, parent_id: null, name: "Income", icon: "payments", is_system: true, exclude_from_totals: false, sort_order: 13, created_at: "" },
-  { id: "10000000-0000-0000-0000-000000000014", user_id: DEV_USER_ID, parent_id: null, name: "Investment", icon: "trending_up", is_system: true, exclude_from_totals: false, sort_order: 14, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000001", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000002", name: "Groceries", icon: "shopping_cart", is_system: true, exclude_from_totals: false, sort_order: 1, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000002", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000002", name: "Dining Out", icon: "restaurant_menu", is_system: true, exclude_from_totals: false, sort_order: 2, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000005", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000003", name: "Fuel", icon: "local_gas_station", is_system: true, exclude_from_totals: false, sort_order: 2, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000007", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000004", name: "Subscriptions", icon: "subscriptions", is_system: true, exclude_from_totals: false, sort_order: 1, created_at: "" },
-  { id: "20000000-0000-0000-0000-000000000011", user_id: DEV_USER_ID, parent_id: "10000000-0000-0000-0000-000000000014", name: "Dividends", icon: "savings", is_system: true, exclude_from_totals: false, sort_order: 1, created_at: "" },
-];
-
-const SAMPLE_TRANSACTIONS: Transaction[] = [
-  {
-    id: "t1", user_id: DEV_USER_ID, upload_id: null, account_id: null,
-    date: "2024-10-24", description: "Coffee Shop", amount: -12.45, currency: "USD",
-    category_id: "20000000-0000-0000-0000-000000000002", categorization_method: "system_rule",
-    ai_confidence: null, notes: null, is_duplicate: false, raw_data: null,
-    created_at: "", updated_at: "",
-    category: CATEGORIES.find((c) => c.id === "20000000-0000-0000-0000-000000000002"),
-  },
-  {
-    id: "t2", user_id: DEV_USER_ID, upload_id: null, account_id: null,
-    date: "2024-10-24", description: "Music Streamer", amount: -9.99, currency: "USD",
-    category_id: "20000000-0000-0000-0000-000000000007", categorization_method: "system_rule",
-    ai_confidence: null, notes: null, is_duplicate: false, raw_data: null,
-    created_at: "", updated_at: "",
-    category: CATEGORIES.find((c) => c.id === "20000000-0000-0000-0000-000000000007"),
-  },
-  {
-    id: "t3", user_id: DEV_USER_ID, upload_id: null, account_id: null,
-    date: "2024-10-23", description: "Dividends Payout", amount: 1000.00, currency: "USD",
-    category_id: "20000000-0000-0000-0000-000000000011", categorization_method: "system_rule",
-    ai_confidence: null, notes: null, is_duplicate: false, raw_data: null,
-    created_at: "", updated_at: "",
-    category: CATEGORIES.find((c) => c.id === "20000000-0000-0000-0000-000000000011"),
-  },
-  {
-    id: "t4", user_id: DEV_USER_ID, upload_id: null, account_id: null,
-    date: "2024-10-23", description: "Gas Station", amount: -54.12, currency: "USD",
-    category_id: "20000000-0000-0000-0000-000000000005", categorization_method: "system_rule",
-    ai_confidence: null, notes: null, is_duplicate: false, raw_data: null,
-    created_at: "", updated_at: "",
-    category: CATEGORIES.find((c) => c.id === "20000000-0000-0000-0000-000000000005"),
-  },
-  {
-    id: "t5", user_id: DEV_USER_ID, upload_id: null, account_id: null,
-    date: "2024-10-23", description: "Market Grocers", amount: -142.08, currency: "USD",
-    category_id: "20000000-0000-0000-0000-000000000001", categorization_method: "system_rule",
-    ai_confidence: null, notes: null, is_duplicate: false, raw_data: null,
-    created_at: "", updated_at: "",
-    category: CATEGORIES.find((c) => c.id === "20000000-0000-0000-0000-000000000001"),
-  },
-];
+import { useAuth } from "@/hooks/useAuth";
+import toast from "react-hot-toast";
 
 export default function TransactionsPage() {
+  const { userId } = useAuth();
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const supabase = createClient();
+
+  const fetchCategories = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("user_id", userId)
+      .order("sort_order");
+    if (data) setCategories(data);
+  }, [userId]);
+
+  const fetchTransactions = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase
+      .from("transactions")
+      .select("*, category:categories(*)")
+      .eq("user_id", userId)
+      .order("date", { ascending: false })
+      .limit(200);
+    if (data) {
+      setTransactions(
+        data.map((t: Record<string, unknown>) => ({
+          ...t,
+          category: t.category || undefined,
+        })) as Transaction[]
+      );
+    }
+    setLoading(false);
+  }, [userId]);
+
+  useEffect(() => {
+    fetchCategories();
+    fetchTransactions();
+  }, [fetchCategories, fetchTransactions]);
 
   // Get unique parent categories for filter dropdown
-  const parentCategories = CATEGORIES.filter((c) => !c.parent_id);
+  const parentCategories = categories.filter((c) => !c.parent_id);
 
-  // Get current month in YYYY-MM format for "This Month" filter
-  const currentMonth = "2024-10"; // Sample data is Oct 2024
+  // Current month in YYYY-MM
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-  const filtered = SAMPLE_TRANSACTIONS.filter((t) => {
-    // Search filter
+  const filtered = transactions.filter((t) => {
     if (search && !t.description.toLowerCase().includes(search.toLowerCase())) {
       return false;
     }
-    // Date filter
     if (activeFilter === "month" && !t.date.startsWith(currentMonth)) {
       return false;
     }
-    // Category filter
     if (activeFilter === "category" && selectedCategory) {
       const matchesDirect = t.category_id === selectedCategory;
       const matchesParent = t.category?.parent_id === selectedCategory;
@@ -165,7 +148,7 @@ export default function TransactionsPage() {
             >
               <span className="text-[13px] font-semibold">
                 {selectedCategory
-                  ? CATEGORIES.find((c) => c.id === selectedCategory)?.name || "Category"
+                  ? categories.find((c) => c.id === selectedCategory)?.name || "Category"
                   : "Category"}
               </span>
               <span className="material-symbols-outlined text-[16px]">expand_more</span>
@@ -209,14 +192,49 @@ export default function TransactionsPage() {
 
         {/* Transaction List */}
         <div className="px-6 pb-32 lg:pb-8">
-          <TransactionList
-            transactions={filtered}
-            allCategories={CATEGORIES}
-            onRecategorize={(txId, newCatId, createRule) => {
-              console.log("Recategorize", txId, newCatId, createRule);
-              // TODO: call /api/categorize
-            }}
-          />
+          {loading ? (
+            <div className="text-center py-12 text-silver-metallic">Loading transactions...</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-12">
+              <span className="material-symbols-outlined text-4xl text-silver-metallic mb-2">receipt_long</span>
+              <p className="text-silver-metallic text-sm">
+                {transactions.length === 0
+                  ? "No transactions yet. Import a bank statement to get started."
+                  : "No transactions match your filters."}
+              </p>
+            </div>
+          ) : (
+            <TransactionList
+              transactions={filtered}
+              allCategories={categories}
+              onRecategorize={async (txId, newCatId, createRule) => {
+                try {
+                  const res = await fetch("/api/categorize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      transactionId: txId,
+                      newCategoryId: newCatId,
+                      createRule,
+                    }),
+                  });
+                  const result = await res.json();
+                  if (!res.ok) {
+                    toast.error(result.error || "Failed to recategorize");
+                  } else {
+                    toast.success(
+                      createRule && result.retroactiveCount > 0
+                        ? `Updated ${result.retroactiveCount + 1} transactions`
+                        : "Category updated"
+                    );
+                    fetchTransactions();
+                  }
+                } catch {
+                  toast.error("Failed to recategorize");
+                }
+              }}
+            />
+          )}
         </div>
       </div>
     </>
