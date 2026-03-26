@@ -8,6 +8,9 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
 
   if (code) {
+    // Collect cookies that Supabase wants to set
+    const cookiesToSetOnResponse: Array<{ name: string; value: string; options?: Record<string, unknown> }> = [];
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -17,7 +20,9 @@ export async function GET(request: NextRequest) {
             return request.cookies.getAll();
           },
           setAll(cookiesToSet) {
-            // We'll set them on the response below
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookiesToSetOnResponse.push({ name, value, options });
+            });
           },
         },
       }
@@ -88,14 +93,13 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Redirect to home with cookies set
+      // Redirect to home with auth cookies properly set
       const response = NextResponse.redirect(`${origin}/`);
 
-      // Set auth cookies on the response
-      const cookieStore = request.cookies;
-      cookieStore.getAll().forEach((cookie) => {
-        response.cookies.set(cookie.name, cookie.value);
-      });
+      // Apply all cookies from the Supabase session exchange
+      for (const { name, value, options } of cookiesToSetOnResponse) {
+        response.cookies.set(name, value, options as Record<string, unknown>);
+      }
 
       return response;
     }
