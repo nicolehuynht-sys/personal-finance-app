@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/Card";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/utils";
@@ -34,7 +35,15 @@ const DONUT_COLORS = [
 
 export function DashboardPage() {
   const { user, userId } = useAuth();
+  const router = useRouter();
   const displayName = user?.user_metadata?.display_name || user?.email?.split("@")[0] || "User";
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/auth/login");
+    router.refresh();
+  };
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentTxns, setRecentTxns] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,7 +104,13 @@ export function DashboardPage() {
             <h1 className="text-base font-bold text-slate-800">{displayName}</h1>
           </div>
         </div>
-        <div />
+        <button
+          onClick={handleLogout}
+          className="w-10 h-10 rounded-full flex items-center justify-center text-silver-metallic hover:text-rose-600 hover:bg-rose-50 transition-colors lg:hidden"
+          title="Log out"
+        >
+          <span className="material-symbols-outlined text-[22px]">logout</span>
+        </button>
       </header>
 
       <div className="px-6 py-6 lg:py-8 space-y-6 lg:space-y-8 max-w-6xl mx-auto">
