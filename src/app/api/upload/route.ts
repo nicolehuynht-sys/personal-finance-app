@@ -112,7 +112,8 @@ export async function POST(req: NextRequest) {
       })),
       userRules || [],
       systemRules || [],
-      categories || []
+      categories || [],
+      userId
     );
 
     // 6. Insert transactions

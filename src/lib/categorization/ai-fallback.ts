@@ -1,19 +1,57 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { Category } from "@/lib/types";
 
-const client = new Anthropic();
+// ── Configuration ──────────────────────────────────────────────
+const AI_MODEL = "claude-haiku-4-5-20241022"; // Much cheaper than Sonnet, plenty smart for categorization
+const MAX_DAILY_AI_CALLS_PER_USER = 10; // Max batch API calls per user per day
+const BATCH_MAX_TOKENS = 2048;
+const SINGLE_MAX_TOKENS = 256;
 
-interface AIResult {
-  categoryId: string;
-  confidence: number;
+// ── In-memory rate limiter (resets on server restart) ──────────
+// For production, move this to a database table or Redis
+const dailyCalls = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const entry = dailyCalls.get(userId);
+
+  if (!entry || now > entry.resetAt) {
+    // Reset at midnight or first call
+    const tomorrow = new Date();
+    tomorrow.setHours(24, 0, 0, 0);
+    dailyCalls.set(userId, { count: 1, resetAt: tomorrow.getTime() });
+    return true;
+  }
+
+  if (entry.count >= MAX_DAILY_AI_CALLS_PER_USER) {
+    return false; // Rate limited
+  }
+
+  entry.count++;
+  return true;
 }
 
-export async function classifyWithAI(
-  transaction: { description: string; amount: number },
-  categories: Category[]
-): Promise<AIResult | null> {
-  const categoryList = categories
-    .filter((c) => !c.parent_id) // Start with parents
+function getRemainingCalls(userId: string): number {
+  const now = Date.now();
+  const entry = dailyCalls.get(userId);
+  if (!entry || now > entry.resetAt) return MAX_DAILY_AI_CALLS_PER_USER;
+  return Math.max(0, MAX_DAILY_AI_CALLS_PER_USER - entry.count);
+}
+
+// ── Check if AI is available ───────────────────────────────────
+function isAIAvailable(): boolean {
+  return !!process.env.ANTHROPIC_API_KEY;
+}
+
+async function getClient() {
+  if (!isAIAvailable()) return null;
+  const Anthropic = (await import("@anthropic-ai/sdk")).default;
+  return new Anthropic();
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+function buildCategoryList(categories: Category[]): string {
+  return categories
+    .filter((c) => !c.parent_id)
     .map((parent) => {
       const children = categories.filter((c) => c.parent_id === parent.id);
       const childLines = children
@@ -22,11 +60,36 @@ export async function classifyWithAI(
       return `- "${parent.name}" (id: ${parent.id})${childLines ? "\n" + childLines : ""}`;
     })
     .join("\n");
+}
+
+// ── Public API ─────────────────────────────────────────────────
+interface AIResult {
+  categoryId: string;
+  confidence: number;
+}
+
+export async function classifyWithAI(
+  transaction: { description: string; amount: number },
+  categories: Category[],
+  userId?: string
+): Promise<AIResult | null> {
+  const client = await getClient();
+  if (!client) {
+    console.log("AI categorization skipped: no ANTHROPIC_API_KEY");
+    return null;
+  }
+
+  if (userId && !checkRateLimit(userId)) {
+    console.log(`AI categorization skipped: user ${userId} hit daily limit (${MAX_DAILY_AI_CALLS_PER_USER} calls)`);
+    return null;
+  }
+
+  const categoryList = buildCategoryList(categories);
 
   try {
     const response = await client.messages.create({
-      model: "claude-sonnet-4-5-20241022",
-      max_tokens: 256,
+      model: AI_MODEL,
+      max_tokens: SINGLE_MAX_TOKENS,
       messages: [
         {
           role: "user",
@@ -67,20 +130,24 @@ If none fit well, respond: { "categoryId": null, "confidence": 0.0 }`,
 
 export async function classifyBatchWithAI(
   transactions: Array<{ index: number; description: string; amount: number }>,
-  categories: Category[]
+  categories: Category[],
+  userId?: string
 ): Promise<Map<number, AIResult>> {
   const results = new Map<number, AIResult>();
 
-  const categoryList = categories
-    .filter((c) => !c.parent_id)
-    .map((parent) => {
-      const children = categories.filter((c) => c.parent_id === parent.id);
-      const childLines = children
-        .map((ch) => `  - "${ch.name}" (id: ${ch.id})`)
-        .join("\n");
-      return `- "${parent.name}" (id: ${parent.id})${childLines ? "\n" + childLines : ""}`;
-    })
-    .join("\n");
+  const client = await getClient();
+  if (!client) {
+    console.log("AI batch categorization skipped: no ANTHROPIC_API_KEY");
+    return results;
+  }
+
+  if (userId && !checkRateLimit(userId)) {
+    const remaining = getRemainingCalls(userId);
+    console.log(`AI batch categorization skipped: user ${userId} hit daily limit (${remaining} calls remaining)`);
+    return results;
+  }
+
+  const categoryList = buildCategoryList(categories);
 
   const transactionList = transactions
     .map((t) => `[${t.index}] "${t.description}" | $${t.amount}`)
@@ -88,8 +155,8 @@ export async function classifyBatchWithAI(
 
   try {
     const response = await client.messages.create({
-      model: "claude-sonnet-4-5-20241022",
-      max_tokens: 2048,
+      model: AI_MODEL,
+      max_tokens: BATCH_MAX_TOKENS,
       messages: [
         {
           role: "user",

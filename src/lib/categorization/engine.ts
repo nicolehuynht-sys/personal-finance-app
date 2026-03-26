@@ -43,7 +43,8 @@ export async function categorizeBatch(
   transactions: TransactionInput[],
   userRules: CategorizationRule[],
   systemRules: SystemRule[],
-  categories: Category[]
+  categories: Category[],
+  userId?: string
 ): Promise<CategorizationResult[]> {
   const results: CategorizationResult[] = [];
   const uncategorizedForAI: Array<{
@@ -77,7 +78,7 @@ export async function categorizeBatch(
     for (let i = 0; i < uncategorizedForAI.length; i += batchSize) {
       const batch = uncategorizedForAI.slice(i, i + batchSize);
       try {
-        const aiResults = await classifyBatchWithAI(batch, categories);
+        const aiResults = await classifyBatchWithAI(batch, categories, userId);
 
         for (const [batchIdx, aiResult] of aiResults) {
           results[batchIdx] = {
