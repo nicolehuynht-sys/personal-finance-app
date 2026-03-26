@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 const tabs = [
   { href: "/", label: "Home", icon: "grid_view" },
@@ -13,6 +14,14 @@ const tabs = [
 
 export function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/auth/login");
+    router.refresh();
+  };
 
   return (
     <>
@@ -113,6 +122,18 @@ export function BottomNav() {
             </Link>
           );
         })}
+
+        {/* Spacer to push logout to bottom */}
+        <div className="flex-1" />
+
+        {/* Logout button */}
+        <button
+          onClick={handleLogout}
+          className="flex flex-col items-center gap-1 py-3 px-2 rounded-xl text-silver-metallic hover:text-rose-600 hover:bg-rose-50 transition-colors mb-4"
+          title="Log out"
+        >
+          <span className="material-symbols-outlined text-[22px]">logout</span>
+        </button>
       </nav>
     </>
   );
