@@ -33,7 +33,8 @@ const DONUT_COLORS = [
 ];
 
 export function DashboardPage() {
-  const { userId } = useAuth();
+  const { user, userId } = useAuth();
+  const displayName = user?.user_metadata?.display_name || user?.email?.split("@")[0] || "User";
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentTxns, setRecentTxns] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,7 +84,7 @@ export function DashboardPage() {
         <div className="flex items-center gap-4">
           <div className="relative">
             <div className="w-10 h-10 rounded-full bg-deep-green/10 flex items-center justify-center text-deep-green font-bold text-sm">
-              AR
+              {displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
             </div>
             <div className="absolute bottom-0 right-0 w-3 h-3 bg-deep-green rounded-full border-2 border-white" />
           </div>
@@ -91,7 +92,7 @@ export function DashboardPage() {
             <p className="text-[10px] font-bold uppercase tracking-wider text-silver-metallic">
               Welcome back
             </p>
-            <h1 className="text-base font-bold text-slate-800">Alex Rivera</h1>
+            <h1 className="text-base font-bold text-slate-800">{displayName}</h1>
           </div>
         </div>
         <div />
