@@ -36,7 +36,7 @@ const DONUT_COLORS = [
 export function DashboardPage() {
   const { user, userId } = useAuth();
   const router = useRouter();
-  const displayName = user?.user_metadata?.display_name || user?.email?.split("@")[0] || "User";
+  const displayName = user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "User";
 
   const handleLogout = async () => {
     const supabase = createClient();
