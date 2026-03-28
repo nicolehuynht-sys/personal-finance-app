@@ -5,17 +5,29 @@ import { Header } from "@/components/layout/Header";
 import { DropZone } from "@/components/import/DropZone";
 import { UploadHistory } from "@/components/import/UploadHistory";
 import { AccountSelector } from "@/components/import/AccountSelector";
+import { ColumnMapper, type ColumnMapping } from "@/components/import/ColumnMapper";
 import { createClient } from "@/lib/supabase/client";
 import type { Upload, Account } from "@/lib/types";
 import { useAuth } from "@/hooks/useAuth";
 import toast from "react-hot-toast";
 
+type MappingStep = {
+  file: File;
+  headers: string[];
+  sampleRows: Record<string, string>[];
+  totalRows: number;
+  suggestedMapping: Partial<ColumnMapping>;
+  detectedBank: string;
+};
+
 export default function ImportPage() {
   const { userId } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [mappingStep, setMappingStep] = useState<MappingStep | null>(null);
 
   const supabase = createClient();
 
@@ -45,8 +57,8 @@ export default function ImportPage() {
     fetchAccounts();
   }, [fetchUploads, fetchAccounts]);
 
+  // Step 1: User selects a file → preview it to get headers & sample rows
   const handleFileSelect = async (file: File) => {
-    // Validate file type
     const validTypes = [
       "text/csv",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -56,18 +68,56 @@ export default function ImportPage() {
       toast.error("Please upload a CSV or XLSX file");
       return;
     }
-
-    // Validate file size (10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast.error("File must be under 10MB");
       return;
     }
 
-    setIsUploading(true);
-
+    setIsPreviewing(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
+
+      const res = await fetch("/api/upload/preview", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await res.json();
+      if (!res.ok) {
+        toast.error(result.error || "Failed to read file");
+        return;
+      }
+
+      setMappingStep({
+        file,
+        headers: result.headers,
+        sampleRows: result.sampleRows,
+        totalRows: result.totalRows,
+        suggestedMapping: result.suggestedMapping,
+        detectedBank: result.detectedBank,
+      });
+
+      if (result.detectedBank !== "Generic") {
+        toast.success(`Detected format: ${result.detectedBank}`);
+      }
+    } catch (err) {
+      toast.error("Failed to read file");
+      console.error(err);
+    } finally {
+      setIsPreviewing(false);
+    }
+  };
+
+  // Step 2: User confirms column mapping → upload with mapping
+  const handleConfirmMapping = async (mapping: ColumnMapping) => {
+    if (!mappingStep) return;
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", mappingStep.file);
+      formData.append("columnMapping", JSON.stringify(mapping));
       if (selectedAccountId) {
         formData.append("accountId", selectedAccountId);
       }
@@ -78,7 +128,6 @@ export default function ImportPage() {
       });
 
       const result = await res.json();
-
       if (!res.ok) {
         toast.error(result.error || "Upload failed");
       } else {
@@ -86,7 +135,7 @@ export default function ImportPage() {
           `Imported ${result.imported} transactions` +
           (result.duplicatesSkipped > 0 ? ` (${result.duplicatesSkipped} duplicates skipped)` : "")
         );
-        // Refresh upload history
+        setMappingStep(null);
         fetchUploads();
       }
     } catch (err) {
@@ -112,35 +161,56 @@ export default function ImportPage() {
           </p>
         </div>
 
-        {/* Drop Zone + Account Selector */}
-        <div className="px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="md:col-span-2">
-            <DropZone onFileSelect={handleFileSelect} isUploading={isUploading} disabled={!selectedAccountId} />
-          </div>
-          <div>
-            <AccountSelector
-              accounts={accounts}
-              selectedId={selectedAccountId}
-              onSelect={setSelectedAccountId}
-              onCreateNew={async (name, institution) => {
-                if (!userId) return;
-                const { data, error } = await supabase.from("accounts").insert({
-                  user_id: userId,
-                  name,
-                  institution: institution || null,
-                  account_type: "checking",
-                }).select().single();
-                if (error) {
-                  toast.error("Failed to create account");
-                } else {
-                  toast.success(`Created account: ${name}`);
-                  await fetchAccounts();
-                  setSelectedAccountId(data.id);
-                }
-              }}
+        {/* Show mapping step or drop zone */}
+        {mappingStep ? (
+          <div className="px-6">
+            <ColumnMapper
+              fileName={mappingStep.file.name}
+              headers={mappingStep.headers}
+              sampleRows={mappingStep.sampleRows}
+              suggestedMapping={mappingStep.suggestedMapping}
+              onConfirm={handleConfirmMapping}
+              onCancel={() => setMappingStep(null)}
+              isUploading={isUploading}
             />
           </div>
-        </div>
+        ) : (
+          <>
+            {/* Drop Zone + Account Selector */}
+            <div className="px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="md:col-span-2">
+                <DropZone
+                  onFileSelect={handleFileSelect}
+                  isUploading={isPreviewing}
+                  disabled={!selectedAccountId}
+                />
+              </div>
+              <div>
+                <AccountSelector
+                  accounts={accounts}
+                  selectedId={selectedAccountId}
+                  onSelect={setSelectedAccountId}
+                  onCreateNew={async (name, institution) => {
+                    if (!userId) return;
+                    const { data, error } = await supabase.from("accounts").insert({
+                      user_id: userId,
+                      name,
+                      institution: institution || null,
+                      account_type: "checking",
+                    }).select().single();
+                    if (error) {
+                      toast.error("Failed to create account");
+                    } else {
+                      toast.success(`Created account: ${name}`);
+                      await fetchAccounts();
+                      setSelectedAccountId(data.id);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Upload History */}
         <div className="px-6 pt-12">
@@ -148,7 +218,6 @@ export default function ImportPage() {
             uploads={uploads}
             onDelete={async (uploadId, fileName) => {
               if (!confirm(`Delete "${fileName}" and all its transactions?`)) return;
-              // Delete transactions first (foreign key), then the upload
               await supabase
                 .from("transactions")
                 .delete()

@@ -3,9 +3,108 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { parseCSV } from "@/lib/parsers/csv-parser";
 import { parseXLSX } from "@/lib/parsers/xlsx-parser";
-import { normalizeRows } from "@/lib/parsers/normalizer";
 import { deduplicateTransactions } from "@/lib/parsers";
 import { categorizeBatch } from "@/lib/categorization/engine";
+import type { NormalizedTransaction } from "@/lib/types";
+
+const UNMAPPED = "__unmapped__";
+
+type ColumnMapping = {
+  date: string;
+  description: string;
+  amount: string;
+  credit: string;
+  debit: string;
+  amountSign: "natural" | "inverted";
+};
+
+function parseDate(dateStr: string): string {
+  const cleaned = dateStr.trim();
+  const slashMatch = cleaned.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, m, d, y] = slashMatch;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  const isoMatch = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) return cleaned;
+  const dashMatch = cleaned.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (dashMatch) {
+    const [, m, d, y] = dashMatch;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  const date = new Date(cleaned);
+  if (!isNaN(date.getTime())) return date.toISOString().split("T")[0];
+  throw new Error(`Cannot parse date: "${dateStr}"`);
+}
+
+function parseAmount(amountStr: string): number {
+  const cleaned = amountStr.replace(/[$,\s]/g, "").trim();
+  const parenMatch = cleaned.match(/^\((.+)\)$/);
+  if (parenMatch) return -parseFloat(parenMatch[1]);
+  return parseFloat(cleaned);
+}
+
+function normalizeWithMapping(
+  rows: Record<string, string>[],
+  mapping: ColumnMapping
+): { transactions: NormalizedTransaction[]; errors: string[] } {
+  const transactions: NormalizedTransaction[] = [];
+  const errors: string[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    try {
+      const row = rows[i];
+      const dateStr = row[mapping.date];
+      const description = row[mapping.description];
+
+      if (!dateStr || !description) {
+        errors.push(`Row ${i + 1}: Missing date or description`);
+        continue;
+      }
+
+      let amount: number;
+
+      if (mapping.amount !== UNMAPPED) {
+        // Single amount column
+        amount = parseAmount(row[mapping.amount] || "0");
+        if (mapping.amountSign === "inverted") {
+          amount = -amount;
+        }
+      } else if (mapping.debit !== UNMAPPED && mapping.credit !== UNMAPPED) {
+        // Split debit/credit columns
+        const creditStr = row[mapping.credit];
+        const debitStr = row[mapping.debit];
+        if (creditStr && !isNaN(parseAmount(creditStr))) {
+          amount = Math.abs(parseAmount(creditStr));
+        } else if (debitStr && !isNaN(parseAmount(debitStr))) {
+          amount = -Math.abs(parseAmount(debitStr));
+        } else {
+          amount = 0;
+        }
+      } else {
+        errors.push(`Row ${i + 1}: No amount mapping`);
+        continue;
+      }
+
+      if (isNaN(amount)) {
+        errors.push(`Row ${i + 1}: Invalid amount`);
+        continue;
+      }
+
+      transactions.push({
+        date: parseDate(dateStr),
+        description: description.trim(),
+        amount,
+        currency: "CAD",
+        raw_data: row,
+      });
+    } catch (err) {
+      errors.push(`Row ${i + 1}: ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
+  }
+
+  return { transactions, errors };
+}
 
 export async function POST(req: NextRequest) {
   const serverSupabase = await createServerSupabaseClient();
@@ -19,6 +118,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const accountId = formData.get("accountId") as string | null;
+    const columnMappingStr = formData.get("columnMapping") as string | null;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -60,20 +160,34 @@ export async function POST(req: NextRequest) {
       throw new Error(`Unsupported file type: .${extension}`);
     }
 
-    // 3. Normalize
-    const { transactions: normalized, errors } = normalizeRows(rows, headers);
+    // 3. Normalize — use column mapping if provided, otherwise fall back to auto-detect
+    let normalized: NormalizedTransaction[];
+    let normalizeErrors: string[];
+
+    if (columnMappingStr) {
+      const mapping: ColumnMapping = JSON.parse(columnMappingStr);
+      const result = normalizeWithMapping(rows, mapping);
+      normalized = result.transactions;
+      normalizeErrors = result.errors;
+    } else {
+      // Legacy auto-detect path
+      const { normalizeRows } = await import("@/lib/parsers/normalizer");
+      const result = normalizeRows(rows, headers);
+      normalized = result.transactions;
+      normalizeErrors = result.errors;
+    }
 
     if (normalized.length === 0) {
       await supabase
         .from("uploads")
         .update({
           status: "failed",
-          error_message: errors.length > 0 ? errors[0] : "No valid transactions found",
+          error_message: normalizeErrors.length > 0 ? normalizeErrors[0] : "No valid transactions found",
         })
         .eq("id", upload.id);
 
       return NextResponse.json(
-        { error: "No valid transactions found", details: errors },
+        { error: "No valid transactions found", details: normalizeErrors },
         { status: 400 }
       );
     }
@@ -154,7 +268,7 @@ export async function POST(req: NextRequest) {
       status: "completed",
       imported: unique.length,
       duplicatesSkipped: duplicateCount,
-      parseErrors: errors.length,
+      parseErrors: normalizeErrors.length,
     });
   } catch (error) {
     console.error("Upload failed:", error);
