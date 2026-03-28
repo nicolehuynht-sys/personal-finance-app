@@ -147,34 +147,13 @@ export function ColumnMapper({
 
           <div className="space-y-3">
             {amountMode === "single" ? (
-              <>
-                <FieldRow
-                  field={AMOUNT_FIELDS[0]}
-                  value={mapping.amount}
-                  headers={headers}
-                  sampleValues={getSampleValues(mapping.amount)}
-                  onChange={(val) => setMapping((prev) => ({ ...prev, amount: val }))}
-                />
-                {/* Amount sign toggle */}
-                <div className="flex items-center gap-3 pl-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={mapping.amountSign === "inverted"}
-                      onChange={(e) =>
-                        setMapping((prev) => ({
-                          ...prev,
-                          amountSign: e.target.checked ? "inverted" : "natural",
-                        }))
-                      }
-                      className="w-4 h-4 rounded border-silver-light text-deep-green focus:ring-deep-green"
-                    />
-                    <span className="text-xs text-slate-600">
-                      Charges are positive (e.g., Amex)
-                    </span>
-                  </label>
-                </div>
-              </>
+              <FieldRow
+                field={AMOUNT_FIELDS[0]}
+                value={mapping.amount}
+                headers={headers}
+                sampleValues={getSampleValues(mapping.amount)}
+                onChange={(val) => setMapping((prev) => ({ ...prev, amount: val }))}
+              />
             ) : (
               <>
                 <FieldRow
@@ -193,6 +172,49 @@ export function ColumnMapper({
                 />
               </>
             )}
+
+            {/* Sign convention */}
+            <div className="mt-2 pt-3 border-t border-slate-100">
+              <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-silver-metallic mb-2">
+                Sign Convention
+              </p>
+              <div className="space-y-2 pl-1">
+                <label className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="radio"
+                    name="amountSign"
+                    checked={mapping.amountSign === "natural"}
+                    onChange={() => setMapping((prev) => ({ ...prev, amountSign: "natural" }))}
+                    className="w-4 h-4 border-silver-light text-deep-green focus:ring-deep-green"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-slate-700">
+                      Expenses are negative, income is positive
+                    </span>
+                    <p className="text-[10px] text-silver-metallic">
+                      Standard format — e.g. -$50.00 for a purchase, +$1000.00 for a deposit
+                    </p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="radio"
+                    name="amountSign"
+                    checked={mapping.amountSign === "inverted"}
+                    onChange={() => setMapping((prev) => ({ ...prev, amountSign: "inverted" }))}
+                    className="w-4 h-4 border-silver-light text-deep-green focus:ring-deep-green"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-slate-700">
+                      Charges are positive, payments are negative
+                    </span>
+                    <p className="text-[10px] text-silver-metallic">
+                      Credit card format (e.g., Amex, some Visa) — $50.00 = expense, -$50.00 = payment
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
