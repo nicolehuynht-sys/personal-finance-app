@@ -115,7 +115,7 @@ export function CategoryPill({
                 onChange={(e) => setCreateRule(e.target.checked)}
                 className="rounded border-silver-light text-deep-green focus:ring-deep-green w-3.5 h-3.5"
               />
-              Always categorize this merchant here
+              Save this categorization for future transactions
             </label>
           </div>
         </div>
