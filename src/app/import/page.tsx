@@ -206,6 +206,32 @@ export default function ImportPage() {
                       setSelectedAccountId(data.id);
                     }
                   }}
+                  onEdit={async (id, name, institution) => {
+                    const { error } = await supabase
+                      .from("accounts")
+                      .update({ name, institution: institution || null })
+                      .eq("id", id);
+                    if (error) {
+                      toast.error("Failed to update account");
+                    } else {
+                      toast.success("Account updated");
+                      fetchAccounts();
+                    }
+                  }}
+                  onDelete={async (id, name) => {
+                    if (!confirm(`Delete account "${name}"? Transactions linked to it will be unlinked.`)) return;
+                    const { error } = await supabase
+                      .from("accounts")
+                      .delete()
+                      .eq("id", id);
+                    if (error) {
+                      toast.error("Failed to delete account");
+                    } else {
+                      toast.success(`Deleted account: ${name}`);
+                      if (selectedAccountId === id) setSelectedAccountId(null);
+                      fetchAccounts();
+                    }
+                  }}
                 />
               </div>
             </div>
