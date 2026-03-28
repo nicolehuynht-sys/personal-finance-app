@@ -44,11 +44,24 @@ export default function InsightsPage() {
       .eq("user_id", userId)
       .eq("is_duplicate", false);
 
+    // Build set of excluded category IDs (including children of excluded parents)
+    const { data: allCatsForExclude } = await supabase
+      .from("categories")
+      .select("id, parent_id, exclude_from_totals")
+      .eq("user_id", userId);
+
+    const excludedIds = new Set<string>();
+    for (const cat of allCatsForExclude || []) {
+      if (cat.exclude_from_totals) excludedIds.add(cat.id);
+    }
+    for (const cat of allCatsForExclude || []) {
+      if (cat.parent_id && excludedIds.has(cat.parent_id)) excludedIds.add(cat.id);
+    }
+
     const allTxns = (txns || []).filter(
       (t: Record<string, unknown>) => {
-        const cat = t.category;
-        if (Array.isArray(cat)) return !cat[0]?.exclude_from_totals;
-        if (cat && typeof cat === "object") return !(cat as { exclude_from_totals: boolean }).exclude_from_totals;
+        const catId = t.category_id as string | null;
+        if (catId && excludedIds.has(catId)) return false;
         return true;
       }
     );

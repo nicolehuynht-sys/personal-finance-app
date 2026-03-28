@@ -30,9 +30,28 @@ export async function GET(req: NextRequest) {
 
     const txns = transactions || [];
 
-    // Filter out transactions whose category is marked exclude_from_totals
+    // Build a set of excluded category IDs (including children of excluded parents)
+    const { data: allCategories } = await supabase
+      .from("categories")
+      .select("id, parent_id, exclude_from_totals")
+      .eq("user_id", userId);
+
+    const excludedIds = new Set<string>();
+    for (const cat of allCategories || []) {
+      if (cat.exclude_from_totals) {
+        excludedIds.add(cat.id);
+      }
+    }
+    // Also exclude children whose parent is excluded
+    for (const cat of allCategories || []) {
+      if (cat.parent_id && excludedIds.has(cat.parent_id)) {
+        excludedIds.add(cat.id);
+      }
+    }
+
+    // Filter out transactions whose category (or parent category) is excluded
     const countableTxns = txns.filter(
-      (t) => !t.category?.exclude_from_totals
+      (t) => !t.category_id || !excludedIds.has(t.category_id)
     );
 
     // Calculate stats (using only countable transactions)
