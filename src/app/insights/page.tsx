@@ -19,6 +19,7 @@ const MONTHS = [
 
 type MonthlyBar = { month: string; spend: number };
 type BudgetItem = { id: string; name: string; icon: string; categoryId: string; spent: number; limit: number };
+type InsightCard = { title: string; icon: string; iconBg: string; iconColor: string; message: string };
 
 export default function InsightsPage() {
   const { userId } = useAuth();
@@ -32,6 +33,7 @@ export default function InsightsPage() {
   const [editModal, setEditModal] = useState(false);
   const [editLimits, setEditLimits] = useState<Record<string, string>>({});
   const [years, setYears] = useState<string[]>([]);
+  const [insights, setInsights] = useState<InsightCard[]>([]);
 
   const supabase = createClient();
 
@@ -169,6 +171,132 @@ export default function InsightsPage() {
       return b.spent - a.spent;
     });
     setBudgets(budgetItems);
+
+    // --- Generate dynamic insights ---
+    const dynamicInsights: InsightCard[] = [];
+
+    // 1. Top spending category
+    const nonExcludedBudgets = budgetItems.filter(b => b.spent > 0);
+    if (nonExcludedBudgets.length > 0) {
+      const top = nonExcludedBudgets[0]; // already sorted by spent desc (after over-budget)
+      const topBySpent = [...nonExcludedBudgets].sort((a, b) => b.spent - a.spent)[0];
+      const pct = periodTotal > 0 ? Math.round((topBySpent.spent / periodTotal) * 100) : 0;
+      dynamicInsights.push({
+        title: "Top Category",
+        icon: topBySpent.icon,
+        iconBg: "bg-deep-green/5",
+        iconColor: "text-deep-green",
+        message: `${topBySpent.name} is your biggest spend at $${topBySpent.spent.toLocaleString("en-US", { minimumFractionDigits: 2 })} (${pct}% of total).`,
+      });
+    }
+
+    // 2. Month-over-month change
+    if (filterMode === "month" && monthIdx >= 1) {
+      const prevKey = selectedYear + "-" + String(monthIdx).padStart(2, "0");
+      const currKey = selectedYear + "-" + String(monthIdx + 1).padStart(2, "0");
+      const prevSpend = monthlyMap.get(prevKey) || 0;
+      const currSpend = monthlyMap.get(currKey) || 0;
+      if (prevSpend > 0) {
+        const changePct = Math.round(((currSpend - prevSpend) / prevSpend) * 100);
+        const direction = changePct >= 0 ? "up" : "down";
+        const absPct = Math.abs(changePct);
+        dynamicInsights.push({
+          title: "Monthly Trend",
+          icon: changePct >= 0 ? "trending_up" : "trending_down",
+          iconBg: changePct >= 0 ? "bg-rose-50" : "bg-emerald-50",
+          iconColor: changePct >= 0 ? "text-rose-600" : "text-emerald-600",
+          message: `Spending is ${direction} ${absPct}% compared to ${MONTHS[monthIdx - 1]}. ${changePct > 10 ? "Consider reviewing discretionary expenses." : changePct < -10 ? "Great progress on reducing spend!" : "Relatively stable spending."}`,
+        });
+      }
+    }
+
+    // 3. Over-budget alerts
+    const overBudgetItems = budgetItems.filter(b => b.limit > 0 && b.spent > b.limit);
+    if (overBudgetItems.length > 0) {
+      const names = overBudgetItems.map(b => b.name).join(", ");
+      const totalOver = overBudgetItems.reduce((s, b) => s + (b.spent - b.limit), 0);
+      dynamicInsights.push({
+        title: "Budget Alert",
+        icon: "warning",
+        iconBg: "bg-amber-50",
+        iconColor: "text-amber-600",
+        message: `${overBudgetItems.length} budget${overBudgetItems.length > 1 ? "s" : ""} exceeded: ${names}. Over by $${totalOver.toFixed(2)} total.`,
+      });
+    } else if (budgetItems.some(b => b.limit > 0)) {
+      dynamicInsights.push({
+        title: "On Track",
+        icon: "check_circle",
+        iconBg: "bg-emerald-50",
+        iconColor: "text-emerald-600",
+        message: "All budgets are within limits. Keep it up!",
+      });
+    }
+
+    // 4. Fastest growing category (compare current vs previous month)
+    if (filterMode === "month" && monthIdx >= 1) {
+      const prevMonthKey = selectedYear + "-" + String(monthIdx).padStart(2, "0");
+      const prevCatSpend = new Map<string, number>();
+      for (const t of allTxns as Array<{ date: string; amount: number; category_id?: string }>) {
+        if (t.amount >= 0) continue;
+        if (t.date.substring(0, 7) !== prevMonthKey) continue;
+        if (t.category_id) {
+          const parentId = childToParent.get(t.category_id) || t.category_id;
+          prevCatSpend.set(parentId, (prevCatSpend.get(parentId) || 0) + Math.abs(t.amount));
+        }
+      }
+
+      let biggestIncrease = { name: "", pct: 0, icon: "category" };
+      for (const b of nonExcludedBudgets) {
+        const prev = prevCatSpend.get(b.categoryId) || 0;
+        if (prev > 20) { // Only compare if previous had meaningful spend
+          const changePct = ((b.spent - prev) / prev) * 100;
+          if (changePct > biggestIncrease.pct) {
+            biggestIncrease = { name: b.name, pct: Math.round(changePct), icon: b.icon };
+          }
+        }
+      }
+      if (biggestIncrease.pct > 15) {
+        dynamicInsights.push({
+          title: "Rising Spend",
+          icon: biggestIncrease.icon,
+          iconBg: "bg-orange-50",
+          iconColor: "text-orange-600",
+          message: `${biggestIncrease.name} is up ${biggestIncrease.pct}% from last month. Worth keeping an eye on.`,
+        });
+      }
+    }
+
+    // 5. Savings rate (if income data available)
+    let totalIncome = 0;
+    for (const t of allTxns as Array<{ date: string; amount: number; category_id?: string }>) {
+      if (t.amount <= 0) continue;
+      const tKey = filterMode === "month" ? t.date.substring(0, 7) : t.date.substring(0, 4);
+      const tMonth = filterMode === "month" ? currentMonthKey : selectedYear;
+      if (tKey !== tMonth) continue;
+      // Only count if category is Income
+      if (t.category_id && catMap.get(t.category_id)?.name === "Income") {
+        totalIncome += t.amount;
+      } else if (t.category_id) {
+        const parentId = childToParent.get(t.category_id);
+        if (parentId && catMap.get(parentId)?.name === "Income") {
+          totalIncome += t.amount;
+        }
+      }
+    }
+    if (totalIncome > 0 && periodTotal > 0) {
+      const savingsRate = Math.round(((totalIncome - periodTotal) / totalIncome) * 100);
+      dynamicInsights.push({
+        title: "Savings Rate",
+        icon: "savings",
+        iconBg: savingsRate >= 20 ? "bg-emerald-50" : savingsRate >= 0 ? "bg-amber-50" : "bg-rose-50",
+        iconColor: savingsRate >= 20 ? "text-emerald-600" : savingsRate >= 0 ? "text-amber-600" : "text-rose-600",
+        message: savingsRate >= 0
+          ? `You saved ${savingsRate}% of income this period. ${savingsRate >= 20 ? "Excellent!" : savingsRate >= 10 ? "Solid progress." : "Try to aim for 20%+."}`
+          : `You spent more than you earned. Overspent by $${Math.abs(totalIncome - periodTotal).toFixed(2)}.`,
+      });
+    }
+
+    setInsights(dynamicInsights.slice(0, 5));
   }, [selectedMonth, selectedYear, filterMode, userId]);
 
   useEffect(() => {
@@ -313,37 +441,28 @@ export default function InsightsPage() {
 
         <div className="h-8" />
 
-        {/* AI Insights */}
+        {/* Dynamic Insights */}
         <div className="mt-4 space-y-4">
-          <h2 className="text-slate-900 text-lg font-bold tracking-tight">AI Insights</h2>
-          <div className="flex gap-4 overflow-x-auto pb-2 hide-scrollbar -mx-4 px-4">
-            <div className="min-w-[280px] p-5 rounded-2xl bg-white border border-slate-100 ios-shadow">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-xl bg-deep-green/5 flex items-center justify-center text-deep-green">
-                  <span className="material-symbols-outlined text-[20px]">restaurant</span>
+          <h2 className="text-slate-900 text-lg font-bold tracking-tight">Insights</h2>
+          {insights.length > 0 ? (
+            <div className="flex gap-4 overflow-x-auto pb-2 hide-scrollbar -mx-4 px-4">
+              {insights.map((insight, i) => (
+                <div key={i} className="min-w-[280px] p-5 rounded-2xl bg-white border border-slate-100 ios-shadow">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-9 h-9 rounded-xl ${insight.iconBg} flex items-center justify-center ${insight.iconColor}`}>
+                      <span className="material-symbols-outlined text-[20px]">{insight.icon}</span>
+                    </div>
+                    <p className="font-bold text-sm text-slate-900">{insight.title}</p>
+                  </div>
+                  <p className="text-[13px] text-slate-600 leading-relaxed">{insight.message}</p>
                 </div>
-                <p className="font-bold text-sm text-slate-900">Dining Trends</p>
-              </div>
-              <p className="text-[13px] text-slate-600 leading-relaxed">
-                {totalSpending > 0
-                  ? `Total spending: $${totalSpending.toLocaleString()}. Review your top categories for savings opportunities.`
-                  : "Import transactions to see spending insights."}
-              </p>
+              ))}
             </div>
-            <div className="min-w-[280px] p-5 rounded-2xl bg-white border border-slate-100 ios-shadow">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-slate-600">
-                  <span className="material-symbols-outlined text-[20px]">savings</span>
-                </div>
-                <p className="font-bold text-sm text-slate-900">Budget Status</p>
-              </div>
-              <p className="text-[13px] text-slate-600 leading-relaxed">
-                {budgets.length > 0
-                  ? `Tracking ${budgets.length} budget${budgets.length > 1 ? "s" : ""}. ${budgets.filter((b) => b.spent > b.limit).length} over limit.`
-                  : "Set monthly budgets to track your spending limits."}
-              </p>
-            </div>
-          </div>
+          ) : (
+            <p className="text-sm text-silver-metallic text-center py-4">
+              Import transactions to see spending insights.
+            </p>
+          )}
         </div>
 
         {/* Monthly Limits / Budget */}
