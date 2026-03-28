@@ -35,7 +35,7 @@ export default function ImportPage() {
     if (!userId) return;
     const { data } = await supabase
       .from("uploads")
-      .select("*")
+      .select("*, account:accounts(name, institution)")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(10);
@@ -256,6 +256,18 @@ export default function ImportPage() {
                 toast.error("Failed to delete upload");
               } else {
                 toast.success(`Deleted "${fileName}"`);
+                fetchUploads();
+              }
+            }}
+            onRename={async (uploadId, newName) => {
+              const { error } = await supabase
+                .from("uploads")
+                .update({ file_name: newName })
+                .eq("id", uploadId);
+              if (error) {
+                toast.error("Failed to rename");
+              } else {
+                toast.success("File renamed");
                 fetchUploads();
               }
             }}

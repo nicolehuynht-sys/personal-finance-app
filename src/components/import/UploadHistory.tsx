@@ -1,9 +1,13 @@
+"use client";
+
+import { useState } from "react";
 import type { Upload } from "@/lib/types";
 import { Badge } from "@/components/ui/Badge";
 
 interface UploadHistoryProps {
   uploads: Upload[];
   onDelete?: (uploadId: string, fileName: string) => void;
+  onRename?: (uploadId: string, newName: string) => void;
 }
 
 const statusConfig = {
@@ -13,8 +17,23 @@ const statusConfig = {
   failed: { badge: "error" as const, icon: "error", label: "Failed" },
 };
 
-export function UploadHistory({ uploads, onDelete }: UploadHistoryProps) {
+export function UploadHistory({ uploads, onDelete, onRename }: UploadHistoryProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+
   if (uploads.length === 0) return null;
+
+  const startEdit = (upload: Upload) => {
+    setEditingId(upload.id);
+    setEditName(upload.file_name);
+  };
+
+  const saveEdit = () => {
+    if (editingId && editName.trim()) {
+      onRename?.(editingId, editName.trim());
+      setEditingId(null);
+    }
+  };
 
   return (
     <div>
@@ -27,6 +46,9 @@ export function UploadHistory({ uploads, onDelete }: UploadHistoryProps) {
         {uploads.map((upload) => {
           const config = statusConfig[upload.status];
           const isFailed = upload.status === "failed";
+          const accountLabel = upload.account
+            ? `${upload.account.name}${upload.account.institution ? ` • ${upload.account.institution}` : ""}`
+            : null;
 
           return (
             <div
@@ -60,21 +82,69 @@ export function UploadHistory({ uploads, onDelete }: UploadHistoryProps) {
               </div>
 
               <div className="flex flex-1 flex-col justify-center min-w-0">
-                <p
-                  className={`text-[14px] font-semibold truncate ${
-                    isFailed ? "text-silver-metallic" : "text-slate-800"
-                  }`}
-                >
-                  {upload.file_name}
-                </p>
-                <p className="text-silver-metallic text-[11px] mt-0.5 uppercase tracking-wider">
-                  {upload.row_count ? `${upload.row_count} Entries • ` : ""}
-                  {upload.status === "completed"
-                    ? "Completed"
-                    : upload.status === "failed"
-                      ? upload.error_message || "Error"
-                      : "Processing"}
-                </p>
+                {editingId === upload.id ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveEdit();
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                      autoFocus
+                      className="flex-1 h-8 border border-silver-light rounded-lg px-2 text-sm font-medium focus:ring-1 focus:ring-deep-green focus:border-deep-green"
+                    />
+                    <button
+                      onClick={saveEdit}
+                      className="text-deep-green hover:text-rich-green transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">check</span>
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="text-silver-metallic hover:text-slate-600 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p
+                      className={`text-[14px] font-semibold truncate ${
+                        isFailed ? "text-silver-metallic" : "text-slate-800"
+                      }`}
+                    >
+                      {upload.file_name}
+                    </p>
+                    {onRename && (
+                      <button
+                        onClick={() => startEdit(upload)}
+                        className="shrink-0 text-silver-metallic hover:text-slate-600 transition-colors"
+                        title="Rename file"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">edit</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {accountLabel && (
+                    <>
+                      <span className="material-symbols-outlined text-[11px] text-silver-metallic">account_balance</span>
+                      <span className="text-[11px] text-silver-metallic font-medium">{accountLabel}</span>
+                      <span className="text-[11px] text-silver-metallic">•</span>
+                    </>
+                  )}
+                  <span className="text-silver-metallic text-[11px] uppercase tracking-wider">
+                    {upload.row_count ? `${upload.row_count} Entries • ` : ""}
+                    {upload.status === "completed"
+                      ? "Completed"
+                      : upload.status === "failed"
+                        ? upload.error_message || "Error"
+                        : "Processing"}
+                  </span>
+                </div>
               </div>
 
               <Badge variant={config.badge}>{config.label}</Badge>

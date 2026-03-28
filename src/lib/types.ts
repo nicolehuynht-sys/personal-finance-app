@@ -45,6 +45,7 @@ export interface Upload {
   error_message: string | null;
   created_at: string;
   completed_at: string | null;
+  account?: { name: string; institution: string | null } | null;
 }
 
 export interface Transaction {
