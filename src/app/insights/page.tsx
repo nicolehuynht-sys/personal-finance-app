@@ -150,7 +150,8 @@ export default function InsightsPage() {
     const budgetItems: BudgetItem[] = [];
     for (const cat of parentCats as Array<{ id: string; name: string; icon: string; exclude_from_totals: boolean }>) {
       const spent = catSpend.get(cat.id) || 0;
-      const limit = budgetMap.get(cat.id) || 0;
+      const monthlyLimit = budgetMap.get(cat.id) || 0;
+      const limit = filterMode === "year" ? monthlyLimit * 12 : monthlyLimit;
       if (spent > 0 || limit > 0) {
         if (cat.exclude_from_totals) continue; // Skip excluded categories like Transfer
         budgetItems.push({
@@ -468,7 +469,9 @@ export default function InsightsPage() {
         {/* Monthly Limits / Budget */}
         <div className="mt-8">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-slate-900 text-lg font-bold tracking-tight">Spending by Category</h2>
+            <h2 className="text-slate-900 text-lg font-bold tracking-tight">
+              Spending by Category {filterMode === "year" ? "(Annual)" : "(Monthly)"}
+            </h2>
             <button onClick={openEditModal} className="text-deep-green text-xs font-bold uppercase tracking-wider">
               Edit
             </button>
@@ -541,7 +544,7 @@ export default function InsightsPage() {
       </div>
 
       {/* Budget Edit Modal */}
-      <Modal open={editModal} onClose={() => setEditModal(false)} title="Edit Monthly Limits">
+      <Modal open={editModal} onClose={() => setEditModal(false)} title={`Edit ${filterMode === "year" ? "Annual" : "Monthly"} Limits`}>
         <div className="space-y-4">
           {budgets.map((budget) => (
             <div key={budget.id} className="flex items-center gap-3">
