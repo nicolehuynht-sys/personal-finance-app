@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -23,7 +23,7 @@ type InsightCard = { title: string; icon: string; iconBg: string; iconColor: str
 
 export default function InsightsPage() {
   const { userId } = useAuth();
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
   const [filterMode, setFilterMode] = useState<FilterMode>("month");
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(String(now.getFullYear()));
@@ -35,7 +35,7 @@ export default function InsightsPage() {
   const [years, setYears] = useState<string[]>([]);
   const [insights, setInsights] = useState<InsightCard[]>([]);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -179,7 +179,6 @@ export default function InsightsPage() {
     // 1. Top spending category
     const nonExcludedBudgets = budgetItems.filter(b => b.spent > 0);
     if (nonExcludedBudgets.length > 0) {
-      const top = nonExcludedBudgets[0]; // already sorted by spent desc (after over-budget)
       const topBySpent = [...nonExcludedBudgets].sort((a, b) => b.spent - a.spent)[0];
       const pct = periodTotal > 0 ? Math.round((topBySpent.spent / periodTotal) * 100) : 0;
       dynamicInsights.push({
@@ -298,7 +297,7 @@ export default function InsightsPage() {
     }
 
     setInsights(dynamicInsights.slice(0, 5));
-  }, [selectedMonth, selectedYear, filterMode, userId]);
+  }, [selectedMonth, selectedYear, filterMode, userId, now, supabase]);
 
   useEffect(() => {
     fetchData();

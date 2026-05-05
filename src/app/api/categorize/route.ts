@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
 
 function extractMerchantName(description: string): string {
   // Remove common prefixes/suffixes, card numbers, etc.
-  let cleaned = description
+  const cleaned = description
     .replace(/\s*#\d+\s*/g, "") // Remove #123
     .replace(/\s*\d{4,}\s*/g, "") // Remove long numbers
     .replace(/\s*(POS|DEBIT|CREDIT|PURCHASE|PAYMENT)\s*/gi, "")

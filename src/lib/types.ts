@@ -1,14 +1,4 @@
-import { z } from "zod";
-
 // Database row types
-export interface Profile {
-  id: string;
-  display_name: string;
-  avatar_url: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface Account {
   id: string;
   user_id: string;
@@ -98,46 +88,14 @@ export interface SystemRule {
   created_at: string;
 }
 
-export interface Budget {
-  id: string;
-  user_id: string;
-  category_id: string;
-  monthly_limit: number;
-  created_at: string;
-  // Joined
-  category?: Category;
-}
-
-// Dashboard stats
-export interface DashboardStats {
-  totalIncome: number;
-  totalSpend: number;
-  netSavings: number;
-  savingsRate: number;
-  spendByCategory: Array<{
-    categoryId: string;
-    categoryName: string;
-    amount: number;
-    percentage: number;
-  }>;
-  monthlyTrend: Array<{
-    month: string;
-    income: number;
-    spend: number;
-    net: number;
-  }>;
-}
-
 // Normalized transaction from file parsing
-export const normalizedTransactionSchema = z.object({
-  date: z.string(),
-  description: z.string(),
-  amount: z.number(),
-  currency: z.string().default("USD"),
-  raw_data: z.record(z.string(), z.unknown()).optional(),
-});
-
-export type NormalizedTransaction = z.infer<typeof normalizedTransactionSchema>;
+export interface NormalizedTransaction {
+  date: string;
+  description: string;
+  amount: number;
+  currency: string;
+  raw_data?: Record<string, unknown>;
+}
 
 // Categorization result
 export interface CategorizationResult {

@@ -1,15 +1,3 @@
-import { createClient } from "@/lib/supabase/client";
-
-/**
- * Client-side: get the current authenticated user ID.
- * Returns null if not authenticated.
- */
-export async function getClientUserId(): Promise<string | null> {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id || null;
-}
-
 /**
  * Default categories to seed for new users.
  */

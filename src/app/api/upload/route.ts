@@ -143,39 +143,24 @@ export async function POST(req: NextRequest) {
 
     // 2. Parse file
     const extension = file.name.split(".").pop()?.toLowerCase();
-    let headers: string[];
     let rows: Record<string, string>[];
 
     if (extension === "csv") {
       const text = await file.text();
-      const result = parseCSV(text);
-      headers = result.headers;
-      rows = result.rows;
+      rows = parseCSV(text).rows;
     } else if (extension === "xlsx" || extension === "xls") {
       const buffer = await file.arrayBuffer();
-      const result = parseXLSX(buffer);
-      headers = result.headers;
-      rows = result.rows;
+      rows = parseXLSX(buffer).rows;
     } else {
       throw new Error(`Unsupported file type: .${extension}`);
     }
 
-    // 3. Normalize — use column mapping if provided, otherwise fall back to auto-detect
-    let normalized: NormalizedTransaction[];
-    let normalizeErrors: string[];
-
-    if (columnMappingStr) {
-      const mapping: ColumnMapping = JSON.parse(columnMappingStr);
-      const result = normalizeWithMapping(rows, mapping);
-      normalized = result.transactions;
-      normalizeErrors = result.errors;
-    } else {
-      // Legacy auto-detect path
-      const { normalizeRows } = await import("@/lib/parsers/normalizer");
-      const result = normalizeRows(rows, headers);
-      normalized = result.transactions;
-      normalizeErrors = result.errors;
+    // 3. Normalize using the column mapping the client confirmed in the UI
+    if (!columnMappingStr) {
+      return NextResponse.json({ error: "Missing column mapping" }, { status: 400 });
     }
+    const mapping: ColumnMapping = JSON.parse(columnMappingStr);
+    const { transactions: normalized, errors: normalizeErrors } = normalizeWithMapping(rows, mapping);
 
     if (normalized.length === 0) {
       await supabase

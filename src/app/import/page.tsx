@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Header } from "@/components/layout/Header";
 import { DropZone } from "@/components/import/DropZone";
 import { UploadHistory } from "@/components/import/UploadHistory";
@@ -29,7 +29,7 @@ export default function ImportPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [mappingStep, setMappingStep] = useState<MappingStep | null>(null);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchUploads = useCallback(async () => {
     if (!userId) return;
@@ -40,7 +40,7 @@ export default function ImportPage() {
       .order("created_at", { ascending: false })
       .limit(10);
     if (data) setUploads(data);
-  }, [userId]);
+  }, [userId, supabase]);
 
   const fetchAccounts = useCallback(async () => {
     if (!userId) return;
@@ -50,7 +50,7 @@ export default function ImportPage() {
       .eq("user_id", userId)
       .order("name");
     if (data) setAccounts(data);
-  }, [userId]);
+  }, [userId, supabase]);
 
   useEffect(() => {
     fetchUploads();

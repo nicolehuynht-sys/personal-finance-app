@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Header } from "@/components/layout/Header";
 import { TransactionList } from "@/components/transactions/TransactionList";
 import { createClient } from "@/lib/supabase/client";
@@ -18,7 +18,7 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchCategories = useCallback(async () => {
     if (!userId) return;
@@ -28,7 +28,7 @@ export default function TransactionsPage() {
       .eq("user_id", userId)
       .order("sort_order");
     if (data) setCategories(data);
-  }, [userId]);
+  }, [userId, supabase]);
 
   const fetchTransactions = useCallback(async () => {
     if (!userId) return;
@@ -47,7 +47,7 @@ export default function TransactionsPage() {
       );
     }
     setLoading(false);
-  }, [userId]);
+  }, [userId, supabase]);
 
   useEffect(() => {
     fetchCategories();

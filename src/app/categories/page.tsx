@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Header } from "@/components/layout/Header";
 import { CategoryTree } from "@/components/categories/CategoryTree";
 import { Modal } from "@/components/ui/Modal";
@@ -20,7 +20,7 @@ export default function CategoriesPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchCategories = useCallback(async () => {
     if (!userId) return;
@@ -30,7 +30,7 @@ export default function CategoriesPage() {
       .eq("user_id", userId)
       .order("sort_order");
     if (data) setCategories(data);
-  }, [userId]);
+  }, [userId, supabase]);
 
   useEffect(() => {
     fetchCategories();

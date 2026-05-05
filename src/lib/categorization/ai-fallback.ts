@@ -1,10 +1,9 @@
 import type { Category } from "@/lib/types";
 
 // ── Configuration ──────────────────────────────────────────────
-const AI_MODEL = "claude-haiku-4-5-20241022"; // Much cheaper than Sonnet, plenty smart for categorization
+const AI_MODEL = "claude-haiku-4-5"; // Much cheaper than Sonnet, plenty smart for categorization
 const MAX_DAILY_AI_CALLS_PER_USER = 10; // Max batch API calls per user per day
 const BATCH_MAX_TOKENS = 2048;
-const SINGLE_MAX_TOKENS = 256;
 
 // ── In-memory rate limiter (resets on server restart) ──────────
 // For production, move this to a database table or Redis
@@ -66,66 +65,6 @@ function buildCategoryList(categories: Category[]): string {
 interface AIResult {
   categoryId: string;
   confidence: number;
-}
-
-export async function classifyWithAI(
-  transaction: { description: string; amount: number },
-  categories: Category[],
-  userId?: string
-): Promise<AIResult | null> {
-  const client = await getClient();
-  if (!client) {
-    console.log("AI categorization skipped: no ANTHROPIC_API_KEY");
-    return null;
-  }
-
-  if (userId && !checkRateLimit(userId)) {
-    console.log(`AI categorization skipped: user ${userId} hit daily limit (${MAX_DAILY_AI_CALLS_PER_USER} calls)`);
-    return null;
-  }
-
-  const categoryList = buildCategoryList(categories);
-
-  try {
-    const response = await client.messages.create({
-      model: AI_MODEL,
-      max_tokens: SINGLE_MAX_TOKENS,
-      messages: [
-        {
-          role: "user",
-          content: `Categorize this bank transaction into one of the categories below.
-
-Transaction: "${transaction.description}" | Amount: ${transaction.amount}
-
-Categories:
-${categoryList}
-
-Respond with JSON only: { "categoryId": "<uuid>", "confidence": <0.0-1.0> }
-If none fit well, respond: { "categoryId": null, "confidence": 0.0 }`,
-        },
-      ],
-    });
-
-    const text =
-      response.content[0].type === "text" ? response.content[0].text : "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-
-    const parsed = JSON.parse(jsonMatch[0]) as {
-      categoryId: string | null;
-      confidence: number;
-    };
-
-    if (!parsed.categoryId) return null;
-
-    return {
-      categoryId: parsed.categoryId,
-      confidence: parsed.confidence,
-    };
-  } catch (error) {
-    console.error("AI categorization failed:", error);
-    return null;
-  }
 }
 
 export async function classifyBatchWithAI(
